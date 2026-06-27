@@ -361,6 +361,16 @@ async def scanall(ctx):
         color=discord.Color.blue()
     )
     await ctx.send(embed=embed)
+@bot.command()
+async def ping(ctx):
+    """Check bot latency"""
+    latency = round(bot.latency * 1000)
+    embed = discord.Embed(
+        title="🏓 Pong!",
+        description=f"Bot latency: **{latency}ms**",
+        color=discord.Color.blue()
+    )
+    await ctx.send(embed=embed)
 
 
 @bot.command()
