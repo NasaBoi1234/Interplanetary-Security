@@ -245,7 +245,114 @@ async def scan(ctx, member: discord.Member):
     await check_member(member, ctx.channel)
 
 @bot.command()
-async def ping(ctx):
+@commands.has_permissions(administrator=True)
+async def scanall(ctx):
+    """Scan all members in the server"""
+    
+    if PRIVATE_BOTS_CHANNEL_ID is None:
+        await ctx.send("❌ Private bots channel not configured. Use `!setup` first.")
+        return
+    
+    # Start scanning
+    status_embed = discord.Embed(
+        title="🔍 Scanning All Members",
+        description="Scanning server members... This may take a while.",
+        color=discord.Color.blue()
+    )
+    status_msg = await ctx.send(embed=status_embed)
+    
+    passed = 0
+    failed = 0
+    private_bots = bot.get_channel(PRIVATE_BOTS_CHANNEL_ID)
+    
+    try:
+        async for member in ctx.guild.fetch_members(limit=None):
+            # Skip bot accounts
+            if member.bot:
+                continue
+            
+            # Check account age and pfp
+            now = datetime.now(timezone.utc)
+            account_age = now - member.created_at
+            account_age_days = account_age.days
+            
+            is_old_enough = account_age_days >= ACCOUNT_AGE_DAYS
+            has_pfp = member.avatar is not None
+            
+            # If should be kicked (old enough check + pfp check)
+            if not is_old_enough or (is_old_enough and not has_pfp):
+                failed += 1
+                
+                # Send to private-bots for verification
+                if private_bots:
+                    review_embed = discord.Embed(
+                        title="⚠️ Member Needs Review (Scanall)",
+                        description=f"**User:** {member.mention} ({member})\n**User ID:** {member.id}",
+                        color=discord.Color.gold(),
+                        timestamp=now
+                    )
+                    
+                    if not is_old_enough:
+                        review_embed.add_field(
+                            name="Issue",
+                            value=f"Account too new ({account_age_days} days old, minimum {ACCOUNT_AGE_DAYS})",
+                            inline=False
+                        )
+                    else:
+                        review_embed.add_field(
+                            name="Issue",
+                            value="No profile picture",
+                            inline=False
+                        )
+                    
+                    review_embed.add_field(name="Account Age", value=f"{account_age_days} days", inline=True)
+                    review_embed.add_field(name="Profile Picture", value="✅" if has_pfp else "❌", inline=True)
+                    
+                    await private_bots.send(embed=review_embed, view=KickButtons(member.id, str(member)))
+            else:
+                # Passed all checks
+                passed += 1
+                
+                # Send to main channel
+                pass_embed = discord.Embed(
+                    title="✅ Member Passed Scanall",
+                    description=f"**User:** {member.mention} ({member})",
+                    color=discord.Color.green()
+                )
+                pass_embed.add_field(name="Account Age", value=f"{account_age_days} days ✅", inline=True)
+                pass_embed.add_field(name="Profile Picture", value="✅", inline=True)
+                
+                await ctx.send(embed=pass_embed)
+        
+        # Send final summary
+        summary_embed = discord.Embed(
+            title="✅ Scanall Complete",
+            description=f"**Passed:** {passed}\n**Needs Review:** {failed}",
+            color=discord.Color.green()
+        )
+        summary_embed.add_field(
+            name="Total Members",
+            value=f"{passed + failed}",
+            inline=False
+        )
+        summary_embed.add_field(
+            name="Next Steps",
+            value=f"Check {private_bots.mention} for {failed} member(s) needing review",
+            inline=False
+        )
+        
+        await status_msg.edit(embed=summary_embed)
+        
+    except Exception as e:
+        error_embed = discord.Embed(
+            title="❌ Error During Scanall",
+            description=f"Error: {str(e)}",
+            color=discord.Color.red()
+        )
+        await status_msg.edit(embed=error_embed)
+
+
+
     """Check bot latency"""
     latency = round(bot.latency * 1000)
     embed = discord.Embed(
